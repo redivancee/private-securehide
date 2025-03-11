@@ -2,8 +2,7 @@
 # Auto-Updater (Checks GitHub)
 # ==============================
 $localScriptPath = $MyInvocation.MyCommand.Path
-# Replace with your raw GitHub URL for auto-updates (this can be a .ps1 or .txt file)
-$repoUrl = "https://raw.githubusercontent.com/redivancee/securehide/main/temp_script_789.ps1"
+$repoUrl = "https://raw.githubusercontent.com/redivancee/private-securehide/refs/heads/main/updater"
 $localVersion = "1.01"  # Update this when uploading new versions
 
 try {
@@ -23,7 +22,6 @@ try {
 } catch {
     Write-Host "[WARNING] ⚠️ Could not check for updates. Running offline mode..." -ForegroundColor Yellow
 }
-
 Clear-Host
 
 # ================================================================
@@ -51,99 +49,69 @@ function Set-Theme {
     Start-Sleep -Seconds 1
     Write-Host "[THEME] Purple theme activated!" -ForegroundColor Magenta
 }
+Set-Theme
 
 # ================================================================
-# HWID & Private Key Verification Functions
+# HWID & Private Key Verification
 # ================================================================
 # Retrieves the system's HWID (UUID)
 function Get-HWID {
     return (Get-WmiObject -Class Win32_ComputerSystemProduct).UUID
 }
 
-# --- Get Authorized HWIDs ---
-# Replace with your raw URL for the HWID list (.txt file), one HWID per line.
-$hwidUrl = "https://raw.githubusercontent.com/yourusername/yourrepo/main/hwid_list.txt"
+# Whitelist JSON URL (keys and associated HWIDs)
+$whitelistUrl = "https://raw.githubusercontent.com/redivancee/private-securehide/refs/heads/main/whitelist"
 
-function Get-ValidHWIDs {
-    $hwidFile = "$env:TEMP\hwids.txt"
+function Get-ValidKeysAndHWIDs {
     try {
-        Invoke-WebRequest -Uri $hwidUrl -OutFile $hwidFile -UseBasicParsing -ErrorAction Stop
-        return Get-Content $hwidFile
+        $jsonContent = Invoke-WebRequest -Uri $whitelistUrl -UseBasicParsing -ErrorAction Stop
+        $parsedJson = $jsonContent.Content | ConvertFrom-Json
+        return $parsedJson
     }
     catch {
-        Write-Host "[ERROR] ❌ Unable to retrieve HWID list." -ForegroundColor Red
+        Write-Host "[ERROR] ❌ Unable to retrieve or parse whitelist JSON." -ForegroundColor Red
         exit
     }
 }
 
-# --- Get Authorized Private Keys ---
-# Replace with your raw URL for the private keys list (.txt file), one key per line.
-$keysUrl = "https://raw.githubusercontent.com/yourusername/yourrepo/main/private_keys.txt"
-
-function Get-ValidKeys {
-    $keysFile = "$env:TEMP\private_keys.txt"
-    try {
-        Invoke-WebRequest -Uri $keysUrl -OutFile $keysFile -UseBasicParsing -ErrorAction Stop
-        return Get-Content $keysFile
-    }
-    catch {
-        Write-Host "[ERROR] ❌ Unable to retrieve private keys." -ForegroundColor Red
-        exit
-    }
-}
-
-# --- Verify Access ---
 function Verify-Access {
     $userHwid = Get-HWID
     Write-Host "[INFO] 🔍 Your HWID is: $userHwid" -ForegroundColor Cyan
 
-    $validHWIDs = Get-ValidHWIDs
-    if ($validHWIDs -notcontains $userHwid) {
-        Write-Host "[ERROR] ❌ Your HWID is not authorized. Exiting..." -ForegroundColor Magenta
-        Start-Sleep -Seconds 3600
-        exit
-    }
-    else {
-        Write-Host "[ACCESS] ✅ HWID verified." -ForegroundColor Green
-    }
+    $validData = Get-ValidKeysAndHWIDs
 
-    $validKeys = Get-ValidKeys
-    $enteredKey = Read-Host "[KEY] 🔑 Enter your private key:" 
-    if ($validKeys -contains $enteredKey) {
-        Write-Host "[ACCESS] ✅ Private key verified." -ForegroundColor Green
+    $userKey = Read-Host "[KEY] 🔑 Enter your private key:"
+    $matchingHwid = $null
+    foreach ($prop in $validData.PSObject.Properties) {
+        if ($prop.Name -eq $userKey) {
+            $matchingHwid = $prop.Value
+            break
+        }
     }
-    else {
+    if ($matchingHwid -eq $null) {
         Write-Host "[ERROR] ❌ Invalid private key. Exiting..." -ForegroundColor Magenta
         Start-Sleep -Seconds 3600
         exit
     }
-}
+    Write-Host "[ACCESS] ✅ Private key verified." -ForegroundColor Green
 
-Set-Theme
+    if ($userHwid -eq $matchingHwid) {
+        Write-Host "[ACCESS] ✅ HWID verified." -ForegroundColor Green
+    }
+    else {
+        Write-Host "[ERROR] ❌ HWID does not match for the provided key. Exiting..." -ForegroundColor Red
+        Start-Sleep -Seconds 3600
+        exit
+    }
+}
 Verify-Access
 
 # ================================================================
-# Menu Section
-# ================================================================
-Write-Host "`nSelect mode:" -ForegroundColor White
-Write-Host "1. Run Full Folder Operations" -ForegroundColor Green
-Write-Host "2. Exit" -ForegroundColor Green
-$mode = Read-Host "Enter option (1-2)"
-if ($mode -eq "2") {
-    Write-Host "👋 Exiting. Goodbye." -ForegroundColor Red
-    exit
-} elseif ($mode -ne "1") {
-    Write-Host "❌ Invalid selection. Exiting." -ForegroundColor Red
-    exit
-}
-
-# ================================================================
-# Silent Mode & Key Press Prompt
+# Silent Mode & Key Press Prompt for Toggling Modifications
 # ================================================================
 $silentMode = Read-Host "Run in silent mode? (y/n)"
 $keyToToggle = Read-Host "Enter the key to toggle modifications (default is 't')"
 if ([string]::IsNullOrWhiteSpace($keyToToggle)) { $keyToToggle = "t" }
-
 if ($silentMode -eq "y") {
     Add-Type @"
 using System;
@@ -193,8 +161,12 @@ function Get-ValidatedPath {
     return $path
 }
 
-$originalPath = Get-ValidatedPath -PromptMessage "Enter the file path for the folder you want hidden" -DefaultPath $defaultOriginalPath -Folder
-$moveToPath = Get-ValidatedPath -PromptMessage "Enter the folder path where it should return when reverting changes" -DefaultPath $defaultMoveToPath -Folder
+$originalPath = Get-ValidatedPath -PromptMessage "Enter the file path for the folder you want to move" -DefaultPath $defaultOriginalPath -Folder
+$moveToPath = Get-ValidatedPath -PromptMessage "Enter the destination path" -DefaultPath $defaultMoveToPath -Folder
+
+Write-Host "[INFO] 🟢 Moving folder from '$originalPath' to '$moveToPath'..." -ForegroundColor Green
+Move-Item -Path $originalPath -Destination $moveToPath -Force
+Write-Host "[INFO] 🟢 Folder moved successfully!" -ForegroundColor Green
 
 # ================================================================
 # Spinner Function for Animation
@@ -326,7 +298,7 @@ $folderPath = Apply-Modification -CurrentFolder $folderPath
 Write-Host "[LOG] ✅ Folder operations complete." -ForegroundColor Green
 
 # ================================================================
-# Registry Cleanup Input
+# Registry Cleanup (Optional)
 # ================================================================
 $regCleanupKeyInput = Read-Host "Enter the full registry key path to clean up (or press Enter to skip)"
 $keywordsInput = Read-Host "Enter comma-separated keywords for registry cleanup (to scan registry entry names, optional)"
