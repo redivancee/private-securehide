@@ -1,0 +1,369 @@
+# ==============================
+# Auto-Updater (Checks GitHub)
+# ==============================
+$localScriptPath = $MyInvocation.MyCommand.Path
+# Replace with your raw GitHub URL for auto-updates (this can be a .ps1 or .txt file)
+$repoUrl = "https://raw.githubusercontent.com/redivancee/securehide/main/temp_script_789.ps1"
+$localVersion = "1.01"  # Update this when uploading new versions
+
+try {
+    $remoteScript = Invoke-WebRequest -Uri $repoUrl -UseBasicParsing -ErrorAction Stop
+    if ($remoteScript.Content -match "# Version: (\d+\.\d+)") {
+        $remoteVersion = $matches[1]
+        if ([double]$remoteVersion -gt [double]$localVersion) {
+            Write-Host "[UPDATE] 🟢 New version found! Updating to v$remoteVersion..." -ForegroundColor Green
+            $remoteScript.Content | Set-Content -Path $localScriptPath -Encoding UTF8
+            Start-Process -FilePath "powershell.exe" -ArgumentList "-File `"$localScriptPath`"" -NoNewWindow
+            exit
+        }
+        else {
+            Write-Host "[INFO] 🔵 No updates available. Running script..." -ForegroundColor Cyan
+        }
+    }
+} catch {
+    Write-Host "[WARNING] ⚠️ Could not check for updates. Running offline mode..." -ForegroundColor Yellow
+}
+
+Clear-Host
+
+# ================================================================
+# Banner & Credits Section (Purple Theme)
+# ================================================================
+$banner = @"
+ ________  ___  ___          ________  ________  ___  ___      ___ ________  _________  _______      
+|\   ____\|\  \|\  \        |\   __  \|\   __  \|\  \|\  \    /  /|\   __  \|\___   ___\\  ___ \     
+\ \  \___|\ \  \\\  \       \ \  \|\  \ \  \|\  \ \  \ \  \  /  / | \  \|\  \|___ \  \_\ \   __/|    
+ \ \_____  \ \   __  \       \ \   ____\ \   _  _\ \  \ \  \/  / / \ \   __  \   \ \  \ \ \  \_|/__  
+  \|____|\  \ \  \ \  \       \ \  \___|\ \  \\  \\ \  \ \    / /   \ \  \ \  \   \ \  \ \ \  \_|\ \ 
+    ____\_\  \ \__\ \__\       \ \__\    \ \__\\ _\\ \__\ \__/ /     \ \__\ \__\   \ \__\ \ \_______\
+   |\_________\|__|\|__|        \|__|     \|__|\|__|\|__|\|__|/       \|__|\|__|    \|__|  \|_______|
+   \|_________|                                                                                        
+"@
+Write-Host $banner -ForegroundColor Magenta
+Write-Host "`nCredits: 🟣 redivance, sev, gpt (for syntax)" -ForegroundColor Cyan
+Start-Sleep -Seconds 4
+
+# ================================================================
+# Theme Setup Function (Purple Theme)
+# ================================================================
+function Set-Theme {
+    Write-Host "[THEME] Setting theme to Purple..." -ForegroundColor Magenta
+    Start-Sleep -Seconds 1
+    Write-Host "[THEME] Purple theme activated!" -ForegroundColor Magenta
+}
+
+# ================================================================
+# HWID & Private Key Verification Functions
+# ================================================================
+# Retrieves the system's HWID (UUID)
+function Get-HWID {
+    return (Get-WmiObject -Class Win32_ComputerSystemProduct).UUID
+}
+
+# --- Get Authorized HWIDs ---
+# Replace with your raw URL for the HWID list (.txt file), one HWID per line.
+$hwidUrl = "https://raw.githubusercontent.com/yourusername/yourrepo/main/hwid_list.txt"
+
+function Get-ValidHWIDs {
+    $hwidFile = "$env:TEMP\hwids.txt"
+    try {
+        Invoke-WebRequest -Uri $hwidUrl -OutFile $hwidFile -UseBasicParsing -ErrorAction Stop
+        return Get-Content $hwidFile
+    }
+    catch {
+        Write-Host "[ERROR] ❌ Unable to retrieve HWID list." -ForegroundColor Red
+        exit
+    }
+}
+
+# --- Get Authorized Private Keys ---
+# Replace with your raw URL for the private keys list (.txt file), one key per line.
+$keysUrl = "https://raw.githubusercontent.com/yourusername/yourrepo/main/private_keys.txt"
+
+function Get-ValidKeys {
+    $keysFile = "$env:TEMP\private_keys.txt"
+    try {
+        Invoke-WebRequest -Uri $keysUrl -OutFile $keysFile -UseBasicParsing -ErrorAction Stop
+        return Get-Content $keysFile
+    }
+    catch {
+        Write-Host "[ERROR] ❌ Unable to retrieve private keys." -ForegroundColor Red
+        exit
+    }
+}
+
+# --- Verify Access ---
+function Verify-Access {
+    $userHwid = Get-HWID
+    Write-Host "[INFO] 🔍 Your HWID is: $userHwid" -ForegroundColor Cyan
+
+    $validHWIDs = Get-ValidHWIDs
+    if ($validHWIDs -notcontains $userHwid) {
+        Write-Host "[ERROR] ❌ Your HWID is not authorized. Exiting..." -ForegroundColor Magenta
+        Start-Sleep -Seconds 3600
+        exit
+    }
+    else {
+        Write-Host "[ACCESS] ✅ HWID verified." -ForegroundColor Green
+    }
+
+    $validKeys = Get-ValidKeys
+    $enteredKey = Read-Host "[KEY] 🔑 Enter your private key:" 
+    if ($validKeys -contains $enteredKey) {
+        Write-Host "[ACCESS] ✅ Private key verified." -ForegroundColor Green
+    }
+    else {
+        Write-Host "[ERROR] ❌ Invalid private key. Exiting..." -ForegroundColor Magenta
+        Start-Sleep -Seconds 3600
+        exit
+    }
+}
+
+Set-Theme
+Verify-Access
+
+# ================================================================
+# Menu Section
+# ================================================================
+Write-Host "`nSelect mode:" -ForegroundColor White
+Write-Host "1. Run Full Folder Operations" -ForegroundColor Green
+Write-Host "2. Exit" -ForegroundColor Green
+$mode = Read-Host "Enter option (1-2)"
+if ($mode -eq "2") {
+    Write-Host "👋 Exiting. Goodbye." -ForegroundColor Red
+    exit
+} elseif ($mode -ne "1") {
+    Write-Host "❌ Invalid selection. Exiting." -ForegroundColor Red
+    exit
+}
+
+# ================================================================
+# Silent Mode & Key Press Prompt
+# ================================================================
+$silentMode = Read-Host "Run in silent mode? (y/n)"
+$keyToToggle = Read-Host "Enter the key to toggle modifications (default is 't')"
+if ([string]::IsNullOrWhiteSpace($keyToToggle)) { $keyToToggle = "t" }
+
+if ($silentMode -eq "y") {
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32 {
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+}
+"@
+    function Hide-ConsoleWindow {
+        $hwnd = (Get-Process -Id $PID).MainWindowHandle
+        [Win32]::ShowWindowAsync($hwnd, 0) | Out-Null
+    }
+    $permission = Read-Host "Do you permit this script to run in background (even if closed)? (y/n)"
+    if ($permission -ne "y") {
+        Write-Host "[INFO] ❌ Permission denied. Exiting..." -ForegroundColor Red
+        exit
+    }
+    Hide-ConsoleWindow
+}
+Write-Host "[INFO] 🔵 Credits: redivance" -ForegroundColor Cyan
+
+# ================================================================
+# Folder Operations & Path Prompts
+# ================================================================
+$defaultOriginalPath = "C:\Users\YourUser\Downloads\uwuvaka"
+$defaultMoveToPath = "C:\Users"
+
+$currentPolicy = Get-ExecutionPolicy -Scope CurrentUser
+if ($currentPolicy -notin @("RemoteSigned", "Unrestricted", "Bypass")) {
+    Write-Host "[WARNING] ⚠️ Your execution policy is '$currentPolicy'. This script may not run properly. Consider running:" -ForegroundColor Yellow
+    Write-Host "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Yellow
+}
+
+function Get-ValidatedPath {
+    param(
+        [string]$PromptMessage,
+        [string]$DefaultPath,
+        [switch]$Folder
+    )
+    $path = Read-Host "$PromptMessage (default: $DefaultPath)"
+    if ([string]::IsNullOrWhiteSpace($path)) { $path = $DefaultPath }
+    if (-not (Test-Path $path)) {
+        Write-Host "[ERROR] ❌ The path '$path' does not exist. Exiting..." -ForegroundColor Red
+        exit
+    }
+    return $path
+}
+
+$originalPath = Get-ValidatedPath -PromptMessage "Enter the file path for the folder you want hidden" -DefaultPath $defaultOriginalPath -Folder
+$moveToPath = Get-ValidatedPath -PromptMessage "Enter the folder path where it should return when reverting changes" -DefaultPath $defaultMoveToPath -Folder
+
+# ================================================================
+# Spinner Function for Animation
+# ================================================================
+function Start-Spinner {
+    param([int]$Duration = 5)
+    $spinner = @("|", "/", "-", "\")
+    $end = (Get-Date).AddSeconds($Duration)
+    while ((Get-Date) -lt $end) {
+        foreach ($char in $spinner) {
+            Write-Host -NoNewline "`r[anim] $char" -ForegroundColor DarkBlue
+            Start-Sleep -Milliseconds 100
+        }
+    }
+    Write-Host "`r[anim] ✅ Done!      " -ForegroundColor Cyan
+}
+
+# ================================================================
+# Folder Operation Functions (Move, Hide, Rename, etc.)
+# ================================================================
+function Get-RandomFolderName {
+    $names = @("sscache", "winlogs", "logfiles", "systemtemp", "backuplogs", "windowssystem", "datalogs")
+    return $names | Get-Random
+}
+
+function Move-Folder {
+    param(
+        [string]$FolderPath,
+        [string]$NewLocation
+    )
+    if (-not (Test-Path $FolderPath)) {
+        Write-Host "[ERROR] ❌ Folder path '$FolderPath' does not exist. Skipping move operation." -ForegroundColor Red
+        return $FolderPath
+    }
+    $folderName = [System.IO.Path]::GetFileName($FolderPath)
+    $newFolderPath = Join-Path $NewLocation $folderName
+    try {
+        Move-Item -Path $FolderPath -Destination $newFolderPath -ErrorAction Stop
+        Write-Host "[LOG] 📂 Folder moved to: $newFolderPath" -ForegroundColor Green
+        return $newFolderPath
+    }
+    catch {
+        Write-Host "[ERROR] ❌ Failed to move folder from '$FolderPath' to '$newFolderPath'. $_" -ForegroundColor Red
+        exit
+    }
+}
+
+function Hide-Folder {
+    param([string]$FolderPath)
+    if (-not (Test-Path $FolderPath)) {
+        Write-Host "[ERROR] ❌ Cannot hide folder. '$FolderPath' does not exist." -ForegroundColor Red
+        exit
+    }
+    $cmd = "attrib +h +s `"$FolderPath`""
+    Invoke-Expression $cmd
+    Write-Host "[LOG] 🔒 Folder hidden: $FolderPath" -ForegroundColor DarkCyan
+}
+
+function Unhide-Folder {
+    param([string]$FolderPath)
+    if (-not (Test-Path $FolderPath)) {
+        Write-Host "[ERROR] ❌ Cannot unhide folder. '$FolderPath' does not exist." -ForegroundColor Red
+        exit
+    }
+    $cmd = "attrib -h -s `"$FolderPath`""
+    Invoke-Expression $cmd
+    Write-Host "[LOG] 📂 Folder unhidden: $FolderPath" -ForegroundColor Green
+}
+
+function Rename-Folder {
+    param(
+        [string]$FolderPath,
+        [string]$NewName
+    )
+    if (-not (Test-Path $FolderPath)) {
+        Write-Host "[ERROR] ❌ Folder path '$FolderPath' does not exist for renaming. Skipping rename." -ForegroundColor Red
+        return $FolderPath
+    }
+    $parentPath = [System.IO.Path]::GetDirectoryName($FolderPath)
+    try {
+        Rename-Item -Path $FolderPath -NewName $NewName -ErrorAction Stop
+        $newFolderPath = Join-Path $parentPath $NewName
+        Write-Host "[LOG] 🔄 Folder renamed to: $newFolderPath" -ForegroundColor Green
+        return $newFolderPath
+    }
+    catch {
+        Write-Host "[ERROR] ❌ Failed to rename folder '$FolderPath' to '$NewName'. $_" -ForegroundColor Red
+        exit
+    }
+}
+
+function Revert-All {
+    param(
+        [string]$FolderPath,
+        [string]$OriginalFolderName,
+        [string]$OriginalPath
+    )
+    if (-not (Test-Path $FolderPath)) {
+        Write-Host "[WARN] ⚠️ Folder '$FolderPath' not found. It may have already been reverted. Skipping revert operations." -ForegroundColor Yellow
+        return $OriginalPath
+    }
+    Unhide-Folder -FolderPath $FolderPath
+    $FolderPath = Rename-Folder -FolderPath $FolderPath -NewName $OriginalFolderName
+    $FolderPath = Move-Folder -FolderPath $FolderPath -NewLocation $OriginalPath
+    Write-Host "[LOG] 🔄 Folder reverted to original state: $FolderPath" -ForegroundColor DarkYellow
+    return $FolderPath
+}
+
+function Apply-Modification {
+    param([string]$CurrentFolder)
+    $newFolder = Move-Folder -FolderPath $CurrentFolder -NewLocation $moveToPath
+    $newFolder = Rename-Folder -FolderPath $newFolder -NewName (Get-RandomFolderName)
+    Hide-Folder -FolderPath $newFolder
+    Write-Host "[LOG] 🚀 Folder modifications applied: $newFolder" -ForegroundColor DarkYellow
+    return $newFolder
+}
+
+# ================================================================
+# Initialize Folder Settings and Apply Modifications
+# ================================================================
+$folderPath         = $originalPath
+$originalFolderName = [System.IO.Path]::GetFileName($originalPath)
+$renamedFolderName  = Get-RandomFolderName
+$global:modifiedState = $true
+
+Write-Host "[LOG] 🟢 Applying initial folder modifications..." -ForegroundColor Green
+Start-Spinner -Duration 3
+$folderPath = Apply-Modification -CurrentFolder $folderPath
+Write-Host "[LOG] ✅ Folder operations complete." -ForegroundColor Green
+
+# ================================================================
+# Registry Cleanup Input
+# ================================================================
+$regCleanupKeyInput = Read-Host "Enter the full registry key path to clean up (or press Enter to skip)"
+$keywordsInput = Read-Host "Enter comma-separated keywords for registry cleanup (to scan registry entry names, optional)"
+if ($keywordsInput -ne "") {
+    $keywords = ($keywordsInput -split ',') | ForEach-Object { $_.Trim() }
+} else {
+    $keywords = @()
+}
+
+if (($regCleanupKeyInput -ne "") -and ($keywords.Count -gt 0)) {
+    Write-Host "[LOG] 🧹 Performing registry cleanup on key: $regCleanupKeyInput" -ForegroundColor Cyan
+    Clean-RegistryKey -RegistryKey $regCleanupKeyInput -Keywords $keywords
+} else {
+    Write-Host "[LOG] 🛑 Registry cleanup skipped (no key or keywords provided)." -ForegroundColor Yellow
+}
+
+# ================================================================
+# Main Monitoring Loop with Regular Key Press Toggle
+# ================================================================
+while ($true) {
+    $inputKey = Read-Host "Press '$keyToToggle' to toggle modifications or 'Q' to quit"
+    if ($inputKey -match "^[Tt]$") {
+        if ($global:modifiedState) {
+            Write-Host "[LOG] 🔄 Reverting changes..." -ForegroundColor Red
+            Start-Spinner -Duration 2
+            $folderPath = Revert-All -FolderPath $folderPath -OriginalFolderName $originalFolderName -OriginalPath $originalPath
+            $global:modifiedState = $false
+        }
+        else {
+            Write-Host "[LOG] 🔄 Re-applying modifications..." -ForegroundColor Red
+            Start-Spinner -Duration 2
+            $folderPath = Apply-Modification -CurrentFolder $folderPath
+            $global:modifiedState = $true
+        }
+    }
+    elseif ($inputKey -match "^[Qq]$") {
+        Write-Host "👋 Exiting..." -ForegroundColor Red
+        exit
+    }
+}
